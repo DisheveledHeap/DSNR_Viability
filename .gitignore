@@ -1,5 +1,5 @@
 *.iso
-*.qcow
+*.qcow2
 
 # Prerequisites
 *.d
