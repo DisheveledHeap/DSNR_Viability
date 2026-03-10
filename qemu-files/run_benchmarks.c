@@ -35,7 +35,7 @@ void* worker(void* arg) {
     pin_thread_to_node(node);
 
     for (int i = 0; i < 1000000; i++) {
-        increment_counter();
+        increment_counter(node);
     }
 
     return NULL;
