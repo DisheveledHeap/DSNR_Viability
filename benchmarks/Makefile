@@ -1,4 +1,4 @@
- Makefile to compile and run run_benchmarks.c with libnuma
+# Makefile to compile and run run_benchmarks.c with libnuma
 
 # Compiler
 CC = gcc
