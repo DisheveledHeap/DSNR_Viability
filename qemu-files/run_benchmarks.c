@@ -8,7 +8,7 @@
 #define NUM_NODES 4
 
 typedef struct {
-    long value
+    long value;
 } replica_t;
 
 replica_t *replicas[NUM_NODES];
@@ -20,16 +20,11 @@ void pin_thread_to_node(int node) {
     numa_free_cpumask(mask);
 }
 
-int get_local_node() {
-    return numa_node_of_cpu(sched_getcpu());
-}
-
-long read_counter() {
-    int node = get_local_node();
+long read_counter(int node) {
     return replicas[node]->value;
 }
 
-void increment_counter() {
+void increment_counter(int node) {
     for (int i = 0; i < NUM_NODES; i++) {
         __sync_fetch_and_add(&replicas[i]->value, 1);
     }
