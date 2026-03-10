@@ -120,7 +120,7 @@ void run(int num_threads, FILE *csv)
 int main()
 {
     /* Check NUMA */
-    int numa_nodes;
+    int numa_nodes = 1;
     if (numa_available() != -1)
         numa_nodes = numa_max_node() + 1;
 
