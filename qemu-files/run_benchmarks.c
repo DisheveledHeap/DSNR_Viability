@@ -9,7 +9,9 @@
 
 typedef struct {
     long value
-} replica_t
+} replica_t;
+
+replica_t *replicas[NUM_NODES];
 
 void pin_thread_to_node(int node) {
     struct bitmask *mask = numa_allocate_cpumask();
