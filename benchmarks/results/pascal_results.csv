@@ -1,0 +1,6 @@
+threads,wall_sec,rows_per_sec,correct
+1,0.0412,48579,YES
+2,0.0239,83824,YES
+4,0.0184,108452,YES
+8,0.0266,75204,YES
+16,0.4357,4591,YES
