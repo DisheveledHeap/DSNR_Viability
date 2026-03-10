@@ -33,10 +33,12 @@ VGA = -vga std
 
 # Artificial latency distances (optional, applied at runtime)
 # Default: no extra latency; format: node0,node1,node2,node3
-LATENCY = -numa node,nodeid=0,distances=0,20,20,20 \
-          -numa node,nodeid=1,distances=20,0,20,20 \
-          -numa node,nodeid=2,distances=20,20,0,20 \
-          -numa node,nodeid=3,distances=20,20,20,0
+LATENCY = -numa dist,src=0,dst=1,val=15 \
+		-numa dist,src=2,dst=3,val=15 \
+		-numa dist,src=0,dst=2,val=20 \
+		-numa dist,src=0,dst=3,val=20 \
+		-numa dist,src=1,dst=2,val=20 \
+		-numa dist,src=1,dst=3,val=20
 
 # ---- Targets ----
 
@@ -47,7 +49,7 @@ create-disk:
 
 # Install Alpine Linux (boot from ISO)
 .PHONY: install
-install: create-disk
+install:
 	$(QEMU) -machine q35 -cpu qemu64 $(SMP) $(MEM) $(NUMA) \
 	-drive file=$(DISK),if=virtio -cdrom $(ISO) -boot d $(NET) $(VGA)
 
@@ -57,4 +59,11 @@ run:
 	$(QEMU) -machine q35 -cpu qemu64 $(SMP) $(MEM) $(NUMA) $(LATENCY) \
 	-drive file=$(DISK),if=virtio -boot c $(NET) $(VGA) \
 	-fsdev local,id=fsdev0,path=$(SHAREDIR),security_model=passthrough \
-	-device virtio-9p-pci,fsdev=fsdev0,mount_tag=hostshare
+	-device virtio-9p-pci,fsdev=fsdev0,mount_tag=hostshare \
+	-usb -device usb-ehci,id=ehci -device usb-kbd -device usb-mouse \
+	-display sdl
+# run:
+# 	$(QEMU) -machine q35 -cpu qemu64 $(SMP) $(MEM) $(NUMA) $(LATENCY) \
+# 	-drive file=$(DISK),if=virtio -boot c $(NET) $(VGA) \
+# 	-fsdev local,id=fsdev0,path=$(SHAREDIR),security_model=passthrough \
+# 	-device virtio-9p-pci,fsdev=fsdev0,mount_tag=hostshare
