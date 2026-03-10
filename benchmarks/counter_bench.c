@@ -120,7 +120,7 @@ void run(int num_threads, FILE *csv)
 int main()
 {
     /* Check NUMA */
-    int numa_nodes = 1;
+    int numa_nodes;
     if (numa_available() != -1)
         numa_nodes = numa_max_node() + 1;
 
@@ -135,7 +135,7 @@ int main()
     printf("╚══════════════════════════════════════════════════════╝\n\n");
 
     /* Open CSV file for results */
-    mkdir("results", 0755);
+    // mkdir("results", 0755);
     FILE *csv = fopen("results/counter_results.csv", "w");
     if (!csv) { perror("Cannot open results file"); return 1; }
     fprintf(csv, "threads,wall_sec,ops_per_sec,correct\n");

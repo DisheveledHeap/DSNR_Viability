@@ -213,7 +213,7 @@ void run(int num_threads, FILE *csv)
 /* ── Main ───────────────────────────────────────────────── */
 int main()
 {
-    int numa_nodes = 1;
+    int numa_nodes;
     if (numa_available() != -1)
         numa_nodes = numa_max_node() + 1;
 
@@ -232,7 +232,7 @@ int main()
     compute_reference();
 
     /* Open CSV */
-    mkdir("results", 0755);
+    // mkdir("results", 0755);
     FILE *csv = fopen("results/pascal_results.csv", "w");
     if (!csv) { perror("Cannot open results file"); return 1; }
     fprintf(csv, "threads,wall_sec,rows_per_sec,correct\n");
