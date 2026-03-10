@@ -3,6 +3,8 @@
 # CPU: qemu64 for maximum portability
 # NUMA: 4 nodes x 4 cores, 16 GB RAM total
 
+LATENCY_VAL = 20
+
 # QEMU executable
 QEMU = qemu-system-x86_64
 
@@ -33,12 +35,12 @@ VGA = -vga std
 
 # Artificial latency distances (optional, applied at runtime)
 # Default: no extra latency; format: node0,node1,node2,node3
-LATENCY = -numa dist,src=0,dst=1,val=15 \
-		-numa dist,src=2,dst=3,val=15 \
-		-numa dist,src=0,dst=2,val=20 \
-		-numa dist,src=0,dst=3,val=20 \
-		-numa dist,src=1,dst=2,val=20 \
-		-numa dist,src=1,dst=3,val=20
+LATENCY = -numa dist,src=0,dst=1,val=$(LATENCY_VAL) \
+		-numa dist,src=2,dst=3,val=$(LATENCY_VAL) \
+		-numa dist,src=0,dst=2,val=$(LATENCY_VAL) \
+		-numa dist,src=0,dst=3,val=$(LATENCY_VAL) \
+		-numa dist,src=1,dst=2,val=$(LATENCY_VAL) \
+		-numa dist,src=1,dst=3,val=$(LATENCY_VAL)
 
 # ---- Targets ----
 
