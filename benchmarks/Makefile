@@ -9,52 +9,52 @@ CFLAGS = -O2 -Wall -pthread
 # Linker flags
 LDFLAGS = -lpthread -lnuma
 
-.PHONY
+.PHONY:
 pascal_comp:
 	echo "\n════════════════════════════════════════════"
 	echo "Compiling Pascal Benchmark"
 	echo "════════════════════════════════════════════"
 	$(CC) $(CFLAGS) -o pascal_bench pascal_bench.c $(LDFLAGS)
 
-.PHONY
+.PHONY:
 counter_comp:
 	echo "\n════════════════════════════════════════════"
 	echo "Compiling Counter Benchmark"
 	echo "════════════════════════════════════════════"
 	$(CC) $(CFLAGS) -o counter_bench counter_bench.c $(LDFLAGS)
 
-.PHONY
+.PHONY:
 pascal: pascal_comp
 	echo "\n════════════════════════════════════════════"
 	echo "Running Pascal Benchmark"
 	echo "════════════════════════════════════════════"
 	./pascal_bench
 
-.PHONY
+.PHONY:
 pascal_r: pascal_comp
 	echo "\n════════════════════════════════════════════"
 	echo "Running Pascal Benchmark"
 	echo "════════════════════════════════════════════"
 	./pascal_bench -r
 
-.PHONY
+.PHONY:
 counter: counter_comp
 	echo "\n════════════════════════════════════════════"
 	echo "Running Counter Benchmark"
 	echo "════════════════════════════════════════════"
 	./counter_bench
 
-.PHONY
+.PHONY:
 counter_r: counter_comp
 	echo "\n════════════════════════════════════════════"
 	echo "Running Counter Benchmark"
 	echo "════════════════════════════════════════════"
 	./counter_bench -r
 
-.PHONY
+.PHONY:
 no_rep: pascal counter
 
-.PHONY
+.PHONY:
 rep: pascal_r counter_r
 
 # Default target: build and run
