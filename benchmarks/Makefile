@@ -57,6 +57,12 @@ no_rep: pascal counter
 .PHONY:
 rep: pascal_r counter_r
 
+.PHONY:
+pascals: pascal pascal_r
+
+.PHONY:
+counters: counter counter_r
+
 # Default target: build and run
 .PHONY: all
 all: echo "\n════════════════════════════════════════════\nRunning All Benchmarks\n════════════════════════════════════════════"
