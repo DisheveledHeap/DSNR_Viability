@@ -183,7 +183,7 @@ void *worker(void *arg)
                     1 :
                     *tri(local,row-1,col-1) + *tri(local,row-1,col);
 
-            val /= AMPLIFICATION
+            val /= AMPLIFICATION;
             
 
             *tri(local, row, col) = val;
