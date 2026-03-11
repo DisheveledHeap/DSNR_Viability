@@ -318,6 +318,7 @@ int main(int argc, char** argv)
     printf("║         PASCAL'S TRIANGLE BENCHMARK                 ║\n");
     printf("║  NUMA nodes : %-3d                                   ║\n",
            numa_nodes);
+	printf("║  Mode: %s     ║", use_replication ? "Node Replication" : "Shared Memory");
     printf("║  Rows       : %-4d                                  ║\n",
            NUM_ROWS);
     printf("║  Goal: correct=YES proves parallel logic is right   ║\n");
