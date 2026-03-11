@@ -43,6 +43,8 @@
 #define MAX_THREADS    16
 #define MAX_NUMA_NODES 16
 
+#define AMPLIFICATION 40
+
 typedef uint64_t cell_t;
 
 /* ── Triangle storage ─────────────────────────────────────
@@ -172,11 +174,18 @@ void *worker(void *arg)
         int end   = start + chunk;
         if (end > row_len) end = row_len;   /* clamp last thread */
         
+        cell_t val;
+
         for (int col = start; col < end; col++) {
-            cell_t val = (col == 0 || col == row) ?
-                1 :
-                *tri(local,row-1,col-1) + *tri(local,row-1,col);
+            val = 0;
+            for (int _ = 0; _ < AMPLIFICATION; _++)
+                val += (col == 0 || col == row) ?
+                    1 :
+                    *tri(local,row-1,col-1) + *tri(local,row-1,col);
+
+            val /= AMPLIFICATION
             
+
             *tri(local, row, col) = val;
 
             if (use_replication) {
