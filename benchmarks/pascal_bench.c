@@ -126,7 +126,7 @@ void pin_thread(int node, int thread_id) {
 
     CPU_ZERO(&mask);
     CPU_SET(cpu, &mask);
-    sched_setaffinity(0, sizeof(mask), mask);
+    sched_setaffinity(0, sizeof(mask), &mask);
 
     numa_free_cpumask(cpus);
 }
