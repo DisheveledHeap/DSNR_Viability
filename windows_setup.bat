@@ -10,7 +10,7 @@ SET QEMU=qemu-system-x86_64.exe
 SET DISK=numa_setup.qcow2
 SET ISO=alpine-standard-x86_64.iso
 
-SET LATENCY_VAL=100
+SET LATENCY_VAL=32
 
 REM Memory / SMP
 SET MEM=-m 16384
