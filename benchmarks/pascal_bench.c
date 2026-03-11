@@ -207,9 +207,9 @@ void *worker(void *arg)
             for (int n = 0; n < numa_nodes; n++) {
                 if (n == t->node_id)
                     continue;
-                memcpy(&triangle_nodes[n][row * MAX_COLS],
-                   &triangle_nodes[t->node_id][row * MAX_COLS],
-                   (row+1) * sizeof(cell_t));
+                memcpy(&triangle_nodes[n][row * MAX_COLS + start],
+                   &triangle_nodes[t->node_id][row * MAX_COLS + start],
+                   (end - start) * sizeof(cell_t));
             }
         }
 
