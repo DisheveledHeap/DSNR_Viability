@@ -202,14 +202,15 @@ void *worker(void *arg)
                 
             // }
         }
+        
+        if (use_replication && start < row_len && end > start) {
 
-        if (use_replication) {
             for (int n = 0; n < numa_nodes; n++) {
                 if (n == t->node_id)
                     continue;
                 memcpy(&triangle_nodes[n][row * MAX_COLS + start],
-                   &triangle_nodes[t->node_id][row * MAX_COLS + start],
-                   (end - start) * sizeof(cell_t));
+                &triangle_nodes[t->node_id][row * MAX_COLS + start],
+                (end - start) * sizeof(cell_t));
             }
         }
 
