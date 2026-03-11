@@ -36,9 +36,10 @@
  * 2001 cells for threads to split.
  * Use uint64_t so values wrap around cleanly (they get huge).
  * ─────────────────────────────────────────────────────── */
-#define NUM_ROWS    2000
-#define MAX_COLS    2000
-#define MAX_THREADS 16
+#define NUM_ROWS       2000
+#define MAX_COLS       2000
+#define MAX_THREADS    16
+#define MAX_NUMA_NODES 16
 
 typedef uint64_t cell_t;
 
@@ -47,8 +48,15 @@ typedef uint64_t cell_t;
  * row_barrier ensures no thread starts row N before
  * all threads have finished row N-1.
  * ─────────────────────────────────────────────────────── */
-cell_t            triangle[NUM_ROWS][MAX_COLS];
+cell_t           *triangle_shared;
+cell_t          **triangle_nodes;
 pthread_barrier_t row_barrier;
+
+int use_replication = 0;
+int numa_nodes = 1;
+
+static inline cell_t *tri(cell_t* base, int r, int c)
+    return &base[r * MAX_COLS + c];
 
 /* ── Single-threaded reference ────────────────────────────
  * Computed once at startup.
@@ -77,12 +85,14 @@ void compute_reference()
 /* ── Verify parallel result against reference ─────────── */
 int verify()
 {
+    cell_t *base = use_replication ? triangle_nodes[0] : triangle_shared[0]
+
     for (int r = 0; r < NUM_ROWS; r++)
         for (int c = 0; c <= r; c++)
-            if (triangle[r][c] != reference[r][c]) {
+            if (*tri(base, r, c) != reference[r][c]) {
                 printf("  MISMATCH at row=%d col=%d "
                        "got=%lu expected=%lu\n",
-                       r, c, triangle[r][c], reference[r][c]);
+                       r, c, *tri(base, r, c), reference[r][c]);
                 return 0;
             }
     return 1;
@@ -92,12 +102,35 @@ int verify()
 typedef struct {
     int thread_id;
     int num_threads;
+    int node_id;
 } ThreadArg;
+
+void pin_thread(int node) {
+    struct bitmask *cpus = numa_allocate_cpumask();
+
+    numa_node_to_cpus(node, cpus);
+
+    for (int i = 0; i < cpus->size; i++) {
+        if (numa_bitmask_isbitset(cpus, i)) {
+            cpu_set_t mask;
+            CPU_ZERO(&mask);
+            CPU_SET(i, &mask);
+            sched_setaffinity(0, sizeof(mask), mask);
+            break;
+        }
+    }
+
+    numa_free_cpumask(cpus);
+}
 
 /* ── Worker: each thread runs this ──────────────────────── */
 void *worker(void *arg)
 {
     ThreadArg *t = (ThreadArg *)arg;
+
+    pin_thread(t->node_id);
+
+    cell_t *local = use_replication ? triangle_nodes[t->node_id] : triangle_shared;
 
     /*
      * Seed row 0: only thread 0 sets it.
@@ -106,7 +139,7 @@ void *worker(void *arg)
      * any of them start row 1.
      */
     if (t->thread_id == 0)
-        triangle[0][0] = 1;
+        tri*(local, 0, 0) = 1;
 
     /* All threads wait here until row 0 is seeded */
     pthread_barrier_wait(&row_barrier);
@@ -130,22 +163,36 @@ void *worker(void *arg)
         int start = t->thread_id * chunk;
         int end   = start + chunk;
         if (end > row_len) end = row_len;   /* clamp last thread */
-
+        
         for (int col = start; col < end; col++) {
-            if (col == 0 || col == row) {
-                /* Left and right edges are always 1 */
-                triangle[row][col] = 1;
-            } else {
-                /*
-                 * Inner cell = left parent + right parent.
-                 * This READ from row-1 is the contention point.
-                 * In disaggregated memory: row-1 might be on a
-                 * remote machine — expensive network fetch.
-                 * NR gives each node a local cached copy of row-1.
-                 */
-                triangle[row][col] = triangle[row-1][col-1]
-                                   + triangle[row-1][col];
+            cell_t val = (col == 0 || col == row) ?
+                1 :
+                *tri(local,row-1,col-1) + *tri(local,row-1,col);
+            
+            *tri(local, row, col) = val
+
+            if (use_replication) {
+                for (int n = 0; n < numa_nodes; n++) {
+                    if (n == t->node_id)
+                        continue;
+                    *tri(triangle_nodes, row, col) = val;
+                }
             }
+            // if (col == 0 || col == row) {
+            //     /* Left and right edges are always 1 */
+            //     *tri(local,row,col) = 1;
+            // } else {
+            //     /*
+            //      * Inner cell = left parent + right parent.
+            //      * This READ from row-1 is the contention point.
+            //      * In disaggregated memory: row-1 might be on a
+            //      * remote machine — expensive network fetch.
+            //      * NR gives each node a local cached copy of row-1.
+            //      */
+            //     *tri(local,row,col) = 
+                                   
+                
+            // }
         }
 
         /*
@@ -163,7 +210,11 @@ void *worker(void *arg)
 void run(int num_threads, FILE *csv)
 {
     /* Clear triangle before each run */
-    memset(triangle, 0, sizeof(triangle));
+    if (use_replication)
+        for (int n = 0; n < numa_nodes; n++) 
+            memset(triangle_nodes[n], 0, NUM_ROWS * MAX_COLS * sizeof(cell_t));
+    else
+        memset(triangle_shared, 0, NUM_ROWS * MAX_COLS * sizeof(cell_t));
 
     /* Create barrier for this run's thread count */
     pthread_barrier_init(&row_barrier, NULL, num_threads);
@@ -179,6 +230,7 @@ void run(int num_threads, FILE *csv)
     for (int i = 0; i < num_threads; i++) {
         args[i].thread_id   = i;
         args[i].num_threads = num_threads;
+        args[i].node_id     = i % numa_nodes;
         pthread_create(&threads[i], NULL, worker, &args[i]);
     }
 
@@ -210,12 +262,40 @@ void run(int num_threads, FILE *csv)
             correct ? "YES" : "NO");
 }
 
+void allocate_triangles()
+{
+    size_t size =
+        NUM_ROWS * MAX_COLS * sizeof(cell_t);
+
+    if(use_replication)
+    {
+        triangle_nodes =
+            malloc(sizeof(cell_t*)*numa_nodes);
+
+        for(int n=0;n<numa_nodes;n++)
+        {
+            triangle_nodes[n] =
+                numa_alloc_onnode(size,n);
+
+            memset(triangle_nodes[n],0,size);
+        }
+    }
+    else
+    {
+        triangle_shared =
+            numa_alloc_onnode(size,0);
+
+        memset(triangle_shared,0,size);
+    }
+}
+
 /* ── Main ───────────────────────────────────────────────── */
 int main()
 {
-    int numa_nodes = 1;
-    if (numa_available() != -1)
-        numa_nodes = numa_max_node() + 1;
+    /* Check NUMA */
+	use_replication = (argc > 1 && strcmp(argv[1], "-r") == 0);
+	if (numa_available() != -1)
+		numa_nodes = numa_max_node() + 1;
 
     printf("\n");
     printf("╔══════════════════════════════════════════════════════╗\n");
@@ -233,7 +313,8 @@ int main()
 
     /* Open CSV */
     // mkdir("results", 0755);
-    FILE *csv = fopen("results/pascal_results.csv", "w");
+    char* csv_name = replication ? "results/pascal_w_replication.csv" : "results/pascal_wo_replication.csv";
+	FILE *csv = fopen(csv_name, "w");
     if (!csv) { perror("Cannot open results file"); return 1; }
     fprintf(csv, "threads,wall_sec,rows_per_sec,correct\n");
 
@@ -242,6 +323,7 @@ int main()
     printf("  %s\n", "──────────────────────────────────────────────");
 
     /* Run with increasing thread counts */
+    allocate_triangles();
     int counts[] = {1, 2, 4, 8, 16};
     for (int i = 0; i < 5; i++)
         run(counts[i], csv);

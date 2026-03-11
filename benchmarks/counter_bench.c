@@ -22,8 +22,9 @@
 #include <numa.h>
 
 /* ── How many times each thread increments the counter ─── */
-#define ITERATIONS  2000000
-#define MAX_THREADS 16
+#define ITERATIONS     2000000
+#define MAX_THREADS    16
+#define MAX_NUMA_NODES 16
 
 /* ── The shared counter ───────────────────────────────────
  * This is the single point of contention.
@@ -33,130 +34,164 @@
  * other variables (false sharing), keeping results clean.
  * ─────────────────────────────────────────────────────── */
 typedef struct {
-    volatile uint64_t value;     /* the actual counter        */
-    pthread_mutex_t   lock;      /* only one thread at a time */
-    char              pad[40];   /* fills to 64 bytes         */
+	volatile uint64_t value;     /* the actual counter        */
+	pthread_mutex_t   lock;      /* only one thread at a time */
+	char              pad[40];   /* fills to 64 bytes         */
 } Counter;
 
 /* One global counter — ALL threads share this */
 Counter shared;
+/* Counters for when node replication is being used */
+Counter *counters_nodes;
+int replication = 0;
+int numa_nodes = 1;
 
 /* ── What each thread needs to know ────────────────────── */
 typedef struct {
-    int thread_id;
+	int thread_id;
+	int node_id
 } ThreadArg;
 
 /* ── Worker: each thread runs this function ─────────────── */
 void *worker(void *arg)
 {
-    ThreadArg *t = (ThreadArg *)arg;
-    (void)t; /* unused for now — will use in NR version */
+	ThreadArg *t = (ThreadArg *)arg;
 
-    for (int i = 0; i < ITERATIONS; i++) {
-        pthread_mutex_lock(&shared.lock);
-        shared.value++;                    /* critical section */
-        pthread_mutex_unlock(&shared.lock);
-    }
-    return NULL;
+	int node_id = replication ? t->node_id : 0; /* unused for now — will use in NR version */
+
+	for (int i = 0; i < ITERATIONS; i++) {
+		if (replication) {
+			// node replication mode
+		} else {
+			pthread_mutex_lock(&shared.lock);
+			shared.value++;                    /* critical section */
+			pthread_mutex_unlock(&shared.lock);
+		}
+	}
+	return NULL;
 }
 
 /* ── Run benchmark with a given number of threads ────────── */
 void run(int num_threads, FILE *csv)
 {
-    pthread_t  threads[MAX_THREADS];
-    ThreadArg  args[MAX_THREADS];
+	pthread_t  threads[MAX_THREADS];
+	ThreadArg  args[MAX_THREADS];
 
-    /* Reset counter before each run */
-    shared.value = 0;
-    pthread_mutex_init(&shared.lock, NULL);
+	if (replication) {
+		// reset each counter and init each mutex
+		for (int i = 0; i < numa_nodes; i++) {
+			counters_nodes[i].value = 0;
+			pthread_mutex_init(&counters_nodes[i].lock, NULL)
+		}
+	} else {
+		/* Reset counter before each run */
+		shared.value = 0;
+		pthread_mutex_init(&shared.lock, NULL);
+	}
 
-    /* Start timer */
-    struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
+	/* Start timer */
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
 
-    /* Spawn all threads */
-    for (int i = 0; i < num_threads; i++) {
-        args[i].thread_id = i;
-        pthread_create(&threads[i], NULL, worker, &args[i]);
-    }
+	/* Spawn all threads */
+	for (int i = 0; i < num_threads; i++) {
+		args[i].thread_id = i;
 
-    /* Wait for all threads to finish */
-    for (int i = 0; i < num_threads; i++)
-        pthread_join(threads[i], NULL);
+		if (numa_available() != -1)
+			args[i].node_id = numa_node_of_cpu(i % numa_num_config_nodes());
+		else
+			args[i].node_id = 0
 
-    /* Stop timer */
-    clock_gettime(CLOCK_MONOTONIC, &end);
+		pthread_create(&threads[i], NULL, worker, &args[i]);
+	}
 
-    /* ── Calculate results ── */
-    double wall_sec = (end.tv_sec  - start.tv_sec) +
-                      (end.tv_nsec - start.tv_nsec) / 1e9;
+	/* Wait for all threads to finish */
+	for (int i = 0; i < num_threads; i++)
+		pthread_join(threads[i], NULL);
 
-    uint64_t expected = (uint64_t)num_threads * ITERATIONS;
-    uint64_t actual   = shared.value;
-    double   ops_sec  = expected / wall_sec;
+	/* Stop timer */
+	clock_gettime(CLOCK_MONOTONIC, &end);
 
-    /* Correctness: did every increment get counted? */
-    int correct = (actual == expected);
+	/* ── Calculate results ── */
+	double wall_sec = (end.tv_sec  - start.tv_sec) +
+					  (end.tv_nsec - start.tv_nsec) / 1e9;
 
-    /* Print result */
-    printf("  threads=%2d  time=%7.3fs  ops/sec=%12.0f  "
-           "expected=%-12lu  got=%-12lu  correct=%s\n",
-           num_threads,
-           wall_sec,
-           ops_sec,
-           expected,
-           actual,
-           correct ? "YES" : "NO <-- BUG");
+	uint64_t expected = (uint64_t)num_threads * ITERATIONS;
+	uint64_t actual;
 
-    /* Save to CSV */
-    fprintf(csv, "%d,%.4f,%.0f,%s\n",
-            num_threads, wall_sec, ops_sec,
-            correct ? "YES" : "NO");
+	if (replication)
+		actual = counters_nodes[0].value
+	else
+		actual = shared.value
 
-    pthread_mutex_destroy(&shared.lock);
+	double   ops_sec  = expected / wall_sec;
+
+	/* Correctness: did every increment get counted? */
+	int correct = (actual == expected);
+
+	/* Print result */
+	printf("  threads=%2d  time=%7.3fs  ops/sec=%12.0f  "
+		   "expected=%-12lu  got=%-12lu  correct=%s\n",
+		   num_threads,
+		   wall_sec,
+		   ops_sec,
+		   expected,
+		   actual,
+		   correct ? "YES" : "NO <-- BUG");
+
+	/* Save to CSV */
+	fprintf(csv, "%d,%.4f,%.0f,%s\n",
+			num_threads, wall_sec, ops_sec,
+			correct ? "YES" : "NO");
+
+	pthread_mutex_destroy(&shared.lock);
 }
 
 /* ── Main ───────────────────────────────────────────────── */
-int main()
+int main(int argc, char** argv)
 {
-    /* Check NUMA */
-    int numa_nodes = 1;
-    if (numa_available() != -1)
-        numa_nodes = numa_max_node() + 1;
+	/* Check NUMA */
+	replication = (argc > 1 && strcmp(argv[1], "-r") == 0);
+	if (numa_available() != -1)
+		numa_nodes = numa_max_node() + 1;
 
-    printf("\n");
-    printf("╔══════════════════════════════════════════════════════╗\n");
-    printf("║           SHARED COUNTER BENCHMARK                  ║\n");
-    printf("║  NUMA nodes: %-3d                                    ║\n",
-           numa_nodes);
-    printf("║  Iterations per thread: %-7d                      ║\n",
-           ITERATIONS);
-    printf("║  Goal: ops/sec should DROP as threads increase      ║\n");
-    printf("╚══════════════════════════════════════════════════════╝\n\n");
+	counters_nodes = numa_alloc_interleaved(sizeof(Counter) * numa_nodes);
 
-    /* Open CSV file for results */
-    // mkdir("results", 0755);
-    FILE *csv = fopen("results/counter_results.csv", "w");
-    if (!csv) { perror("Cannot open results file"); return 1; }
-    fprintf(csv, "threads,wall_sec,ops_per_sec,correct\n");
+	printf("\n");
+	printf("╔══════════════════════════════════════════════════════╗\n");
+	printf("║           SHARED COUNTER BENCHMARK                  ║\n");
+	printf("║  NUMA nodes: %-3d                                    ║\n",
+		   numa_nodes);
+	printf("║  Mode: %s     ║", replication ? "Node Replication" : "Shared Memory");
+	printf("║  Iterations per thread: %-7d                      ║\n",
+		   ITERATIONS);
+	printf("║  Goal: ops/sec should DROP as threads increase      ║\n");
+	printf("╚══════════════════════════════════════════════════════╝\n\n");
 
-    printf("  %-10s %-12s %-14s %-14s %-14s %s\n",
-           "Threads", "Time(s)", "Ops/sec",
-           "Expected", "Got", "Correct");
-    printf("  %s\n", "─────────────────────────────────────────"
-                      "──────────────────────────────");
+	/* Open CSV file for results */
+	// mkdir("results", 0755);
+	char* csv_name = replication ? "results/counter_w_replication.csv" : "results/counter_wo_replication.csv";
+	FILE *csv = fopen(csv_name, "w");
+	if (!csv) { perror("Cannot open results file"); return 1; }
+	fprintf(csv, "threads,wall_sec,ops_per_sec,correct\n");
 
-    /* Run with increasing thread counts */
-    int counts[] = {1, 2, 4, 8, 16};
-    for (int i = 0; i < 5; i++)
-        run(counts[i], csv);
+	printf("  %-10s %-12s %-14s %-14s %-14s %s\n",
+		   "Threads", "Time(s)", "Ops/sec",
+		   "Expected", "Got", "Correct");
+	printf("  %s\n", "─────────────────────────────────────────"
+					  "──────────────────────────────");
 
-    fclose(csv);
+	/* Run with increasing thread counts */
+	int counts[] = {1, 2, 4, 8, 16};
+	for (int i = 0; i < 5; i++)
+		run(counts[i], csv);
 
-    printf("\n  Results saved to results/counter_results.csv\n");
-    printf("\n  What to look for:\n");
-    printf("  → ops/sec dropping = contention problem confirmed\n");
-    printf("  → correct=YES      = no lost increments (mutex works)\n\n");
+	fclose(csv);
 
-    return 0;
+	printf("\n  Results saved to results/counter_results.csv\n");
+	printf("\n  What to look for:\n");
+	printf("  → ops/sec dropping = contention problem confirmed\n");
+	printf("  → correct=YES      = no lost increments (mutex works)\n\n");
+
+	return 0;
 }
