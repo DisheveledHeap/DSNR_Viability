@@ -179,11 +179,9 @@ void *worker(void *arg)
         for (int col = start; col < end; col++) {
             val = 0;
             for (int _ = 0; _ < AMPLIFICATION; _++)
-                val += (col == 0 || col == row) ?
+                val = (col == 0 || col == row) ?
                     1 :
                     *tri(local,row-1,col-1) + *tri(local,row-1,col);
-
-            val /= AMPLIFICATION;
             
 
             *tri(local, row, col) = val;
