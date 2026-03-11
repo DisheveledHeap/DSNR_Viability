@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <numa.h>
+#include <sched.h>
 
 /* ── Triangle size ────────────────────────────────────────
  * 2000 rows gives enough work per row to make parallelism
@@ -37,7 +38,7 @@
  * Use uint64_t so values wrap around cleanly (they get huge).
  * ─────────────────────────────────────────────────────── */
 #define NUM_ROWS       2000
-#define MAX_COLS       2000
+#define MAX_COLS       (NUM_ROWS + 1)
 #define MAX_THREADS    16
 #define MAX_NUMA_NODES 16
 
@@ -55,8 +56,9 @@ pthread_barrier_t row_barrier;
 int use_replication = 0;
 int numa_nodes = 1;
 
-static inline cell_t *tri(cell_t* base, int r, int c)
+static inline cell_t *tri(cell_t* base, int r, int c) {
     return &base[r * MAX_COLS + c];
+}
 
 /* ── Single-threaded reference ────────────────────────────
  * Computed once at startup.
@@ -85,7 +87,7 @@ void compute_reference()
 /* ── Verify parallel result against reference ─────────── */
 int verify()
 {
-    cell_t *base = use_replication ? triangle_nodes[0] : triangle_shared[0]
+    cell_t *base = use_replication ? triangle_nodes[0] : triangle_shared;
 
     for (int r = 0; r < NUM_ROWS; r++)
         for (int c = 0; c <= r; c++)
@@ -102,23 +104,28 @@ int verify()
 typedef struct {
     int thread_id;
     int num_threads;
+    int local_tid; // to ensure thread distribution within a node
     int node_id;
 } ThreadArg;
 
-void pin_thread(int node) {
+void pin_thread(int node, int thread_id) {
     struct bitmask *cpus = numa_allocate_cpumask();
-
     numa_node_to_cpus(node, cpus);
 
-    for (int i = 0; i < cpus->size; i++) {
-        if (numa_bitmask_isbitset(cpus, i)) {
-            cpu_set_t mask;
-            CPU_ZERO(&mask);
-            CPU_SET(i, &mask);
-            sched_setaffinity(0, sizeof(mask), mask);
-            break;
-        }
-    }
+    int cpu_list[256];
+    int cpu_count = 0;
+
+    for (int i = 0; i < cpus->size; i++)
+        if (numa_bitmask_isbitset(cpus, i))
+            cpu_list[cpu_count++] = i;
+
+    int cpu = cpu_list[thread_id % cpu_count];
+
+    cpu_set_t mask;
+
+    CPU_ZERO(&mask);
+    CPU_SET(cpu, &mask);
+    sched_setaffinity(0, sizeof(mask), mask);
 
     numa_free_cpumask(cpus);
 }
@@ -128,7 +135,7 @@ void *worker(void *arg)
 {
     ThreadArg *t = (ThreadArg *)arg;
 
-    pin_thread(t->node_id);
+    pin_thread(t->node_id, t->local_tid);
 
     cell_t *local = use_replication ? triangle_nodes[t->node_id] : triangle_shared;
 
@@ -139,7 +146,7 @@ void *worker(void *arg)
      * any of them start row 1.
      */
     if (t->thread_id == 0)
-        tri*(local, 0, 0) = 1;
+        *tri(local, 0, 0) = 1;
 
     /* All threads wait here until row 0 is seeded */
     pthread_barrier_wait(&row_barrier);
@@ -169,13 +176,13 @@ void *worker(void *arg)
                 1 :
                 *tri(local,row-1,col-1) + *tri(local,row-1,col);
             
-            *tri(local, row, col) = val
+            *tri(local, row, col) = val;
 
             if (use_replication) {
                 for (int n = 0; n < numa_nodes; n++) {
                     if (n == t->node_id)
                         continue;
-                    *tri(triangle_nodes, row, col) = val;
+                    *tri(triangle_nodes[n], row, col) = val;
                 }
             }
             // if (col == 0 || col == row) {
@@ -230,6 +237,7 @@ void run(int num_threads, FILE *csv)
     for (int i = 0; i < num_threads; i++) {
         args[i].thread_id   = i;
         args[i].num_threads = num_threads;
+        args[i].local_tid   = i / numa_nodes;
         args[i].node_id     = i % numa_nodes;
         pthread_create(&threads[i], NULL, worker, &args[i]);
     }
@@ -290,7 +298,7 @@ void allocate_triangles()
 }
 
 /* ── Main ───────────────────────────────────────────────── */
-int main()
+int main(int argc, char** argv)
 {
     /* Check NUMA */
 	use_replication = (argc > 1 && strcmp(argv[1], "-r") == 0);
@@ -313,7 +321,7 @@ int main()
 
     /* Open CSV */
     // mkdir("results", 0755);
-    char* csv_name = replication ? "results/pascal_w_replication.csv" : "results/pascal_wo_replication.csv";
+    char* csv_name = use_replication ? "results/pascal_w_replication.csv" : "results/pascal_wo_replication.csv";
 	FILE *csv = fopen(csv_name, "w");
     if (!csv) { perror("Cannot open results file"); return 1; }
     fprintf(csv, "threads,wall_sec,rows_per_sec,correct\n");
@@ -330,7 +338,7 @@ int main()
 
     fclose(csv);
 
-    printf("\n  Results saved to results/pascal_results.csv\n");
+    printf("\n  Results saved to %s\n", csv_name);
     printf("\n  What to look for:\n");
     printf("  → correct=YES for all runs = parallel logic works\n");
     printf("  → time changes show barrier synchronisation cost\n");
