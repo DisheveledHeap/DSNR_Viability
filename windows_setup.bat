@@ -10,7 +10,7 @@ SET QEMU=qemu-system-x86_64.exe
 SET DISK=numa_setup.qcow2
 SET ISO=alpine-standard-x86_64.iso
 
-SET LATENCY_VAL=64
+SET LATENCY_VAL=32
 
 REM Memory / SMP
 SET MEM=-m 16384
@@ -32,11 +32,11 @@ SET VGA=-vga std
 
 REM Artificial latency (default, can edit)
 SET LATENCY=-numa dist,src=0,dst=1,val=%LATENCY_VAL% ^
-		-numa dist,src=2,dst=3,val=%LATENCY_VAL% ^
+		-numa dist,src=2,dst=3,val=15 ^
 		-numa dist,src=0,dst=2,val=%LATENCY_VAL% ^
 		-numa dist,src=0,dst=3,val=%LATENCY_VAL% ^
-		-numa dist,src=1,dst=2,val=%LATENCY_VAL% ^
-		-numa dist,src=1,dst=3,val=%LATENCY_VAL%
+		-numa dist,src=1,dst=2,val=15 ^
+		-numa dist,src=1,dst=3,val=15
 
 REM ---- Check flag ----
 IF /I "%1"=="/install" (
