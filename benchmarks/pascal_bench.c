@@ -21,6 +21,7 @@
  * Compile: gcc -O2 -o pascal_bench pascal_bench.c -lpthread -lnuma
  * Run:     ./pascal_bench
  */
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
