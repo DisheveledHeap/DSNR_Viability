@@ -43,7 +43,7 @@
 #define MAX_THREADS    16
 #define MAX_NUMA_NODES 16
 
-#define AMPLIFICATION 40
+#define AMPLIFICATION 20
 
 typedef uint64_t cell_t;
 
