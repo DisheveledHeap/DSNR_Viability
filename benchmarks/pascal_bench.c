@@ -186,13 +186,6 @@ void *worker(void *arg)
 
             *tri(local, row, col) = val;
 
-            if (use_replication) {
-                for (int n = 0; n < numa_nodes; n++) {
-                    if (n == t->node_id)
-                        continue;
-                    *tri(triangle_nodes[n], row, col) = val;
-                }
-            }
             // if (col == 0 || col == row) {
             //     /* Left and right edges are always 1 */
             //     *tri(local,row,col) = 1;
@@ -208,6 +201,16 @@ void *worker(void *arg)
                                    
                 
             // }
+        }
+
+        if (use_replication) {
+            for (int n = 0; n < numa_nodes; n++) {
+                if (n == t->node_id)
+                    continue;
+                memcpy(&triangle_nodes[n][row * MAX_COLS],
+                   &triangle_nodes[t->node_id][row * MAX_COLS],
+                   (row+1) * sizeof(cell_t));
+            }
         }
 
         /*
