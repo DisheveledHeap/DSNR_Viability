@@ -37,3 +37,13 @@ The result of our testing indicates that node replication provides a insufficien
 
 ### Future
 While the cases that we tested indicate that the overhead of having to transmit data several times over high latency nodes outweighs the benefits of being able to read locally, both benchmark functions we implemented, including the one we didn't store data for, were for comparatively write heavy operations. For something more read-heavy—like allowing nodes to simply access a database to do local operations—this architecture may be more useful.
+
+
+# References
+[1] A. Baumann et al., “The multikernel: a new OS architecture for scalable multicore systems,” in Proceedings of the ACM SIGOPS 22nd symposium on Operating systems principles, Big Sky Montana USA: ACM, Oct. 2009, pp. 29–44. doi: 10.1145/1629575.1629579.
+
+[2] USENIX Association, Ed., “NrOS: Effective Replication and Sharing in an Operating System,” in Proceedings of the 15th USENIX Symposium on Operating Systems Design and Implementation (OSDI ’21): July 14-16, 2021, Berkeley, CA: USENIX Association, 2021.
+
+[3] A. Panda, A. Panwar, and A. Basu, “nuKSM: NUMA-aware Memory De-duplication on Multi-socket Servers,” in 2021 30th International Conference on Parallel Architectures and Compilation Techniques (PACT), Atlanta, GA, USA: IEEE, Sep. 2021, pp. 258–273. doi: 10.1109/PACT52795.2021.00026.
+
+[4] A. Murat, C. Burgelin, A. Xygkis, I. Zablotchi, M. K. Aguilera, and R. Guerraoui, “SWARM: Replicating Shared Disaggregated-Memory Data in No Time,” in Proceedings of the ACM SIGOPS 30th Symposium on Operating Systems Principles, Austin TX USA: ACM, Nov. 2024, pp. 24–45. doi: 10.1145/3694715.3695945.
