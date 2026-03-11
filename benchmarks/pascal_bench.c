@@ -40,7 +40,7 @@
  * ─────────────────────────────────────────────────────── */
 #define NUM_ROWS       2000
 #define MAX_COLS       (NUM_ROWS + 1)
-#define MAX_THREADS    20
+#define MAX_THREADS    32
 #define MAX_NUMA_NODES 16
 
 #define AMPLIFICATION 40
@@ -341,8 +341,8 @@ int main(int argc, char** argv)
 
     /* Run with increasing thread counts */
     allocate_triangles();
-    int counts[] = {4, 8, 12, 16, 20};
-    for (int i = 0; i < 5; i++)
+    int counts[] = {4, 8, 12, 16, 20, 24, 28, 32};
+    for (int i = 0; i < 8; i++)
         run(counts[i], csv);
 
     fclose(csv);

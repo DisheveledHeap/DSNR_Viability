@@ -3,7 +3,7 @@
 # CPU: qemu64 for maximum portability
 # NUMA: 4 nodes x 4 cores, 16 GB RAM total
 
-LATENCY_VAL = 64
+LATENCY_VAL = 32
 
 # QEMU executable
 QEMU = qemu-system-x86_64
